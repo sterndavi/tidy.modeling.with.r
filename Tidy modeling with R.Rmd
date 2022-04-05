@@ -1,0 +1,467 @@
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(leaflet)
+```
+
+```{r}
+head(mtcars)
+```
+```{r}
+boot_samp <- rsample::bootstraps(mtcars, times = 3)
+
+```
+
+
+
+```{r}
+n <- nrow(mtcars)
+
+ratios <- rep(NA_real_, n)
+
+for (car in 1:n) {
+    ratios[car] <- log(mtcars$mpg[car]) / mtcars$wt[car]
+}
+
+head(ratios)
+
+```
+
+
+
+```{r}
+
+comput_log_ratio <- function(mpg, wt, log_base = exp(1)){
+    
+    log(mpg/wt, base = log_base)
+}
+
+
+
+
+
+```
+
+
+```{r}
+
+map(head(mtcars$mpg, 3), sqrt)
+
+
+```
+
+```{r}
+data.frame(`variable 1` = 1:2, two = 3:4)
+```
+
+```{r}
+data(crickets, package = "modeldata")
+
+names(crickets)
+
+crickets %>% 
+    ggplot(aes(temp, rate, color = species, pch = species, lty = species))+
+    geom_point(size = 2)+
+    geom_smooth(method = lm,  se = FALSE, alpha = 0.5)+
+    scale_color_brewer(palette = "Paired")
+
+```
+
+```{r}
+
+lm(rate ~ temp, data = crickets)
+
+```
+
+
+```{r}
+lm(rate ~ temp + species, data = crickets)
+```
+
+
+```{r}
+lm(rate ~ temp + species+ temp:species, data = crickets)
+```
+```{r}
+lm(rate ~ temp + species+ (temp + species)^2, data = crickets)
+```
+```{r}
+lm(rate ~ temp + species+ temp * species, data = crickets)
+```
+
+```{r}
+
+
+lm(rate ~ I( (temp * 9/5) + 32) , data = crickets)
+
+```
+
+
+```{r}
+interaction_fit <- lm(rate ~ (temp + species) ^ 2, data = crickets)
+
+interaction_fit$residuals
+
+interaction_fit
+
+```
+```{r}
+
+plot(interaction_fit, which = 1)
+
+plot(interaction_fit, which = 2)
+
+```
+```{r}
+
+main_effect_fit <- lm(rate ~ temp + species, data = crickets)
+
+anova(main_effect_fit, interaction_fit)
+
+```
+
+```{r}
+summary(main_effect_fit)
+```
+
+
+```{r}
+new_values <- data.frame(species = "O. exclamationis", temp = 15:20)
+
+
+predict(main_effect_fit, new_values)
+
+
+
+```
+
+cor.test()
+    Test for association between paired samples
+    
+```{r}
+corr_res <- map(mtcars %>% select(-mpg), cor.test, y = mtcars$mpg)
+
+corr_res[[1]]
+```
+
+```{r}
+broom::tidy(corr_res[[1]])
+
+a <- map_dfr(corr_res, tidy)
+
+```
+
+
+```{r}
+
+corr_ress_df <- 
+    corr_res %>% 
+        map_dfr(tidy, .id = "predictor")
+        
+
+# corr_ress_plot
+
+corr_ress_df %>% 
+    ggplot(aes(x = fct_reorder(predictor, estimate))) +  # x = cols from mtcars
+    geom_point(aes(y = estimate)) +  # y = estimative of corelation
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = .1) + # ymin and ymax = lowest an highest confidence intervals
+    labs(x = NULL, y = "Correlation with mpg")
+
+
+
+
+```
+
+
+```{r}
+
+split_by_species <- 
+    crickets %>% 
+    group_nest(species) #group_nest breaks the data into separate nests
+
+split_by_species
+
+```
+
+```{r}
+# then we can run a model for each species using anonymous functions 
+model_by_species <- split_by_species %>% 
+    mutate(model = map(data, ~lm(rate ~ temp, data = .x)))
+
+```
+
+
+```{r}
+model_by_species %>% 
+    mutate(coef = map(model, tidy)) %>% 
+    select(species, coef) %>% 
+    unnest(cols = c(coef)) -> df_result_model_by_species
+
+```
+
+
+Chapter 4 - The Ames Housing Data
+
+
+```{r}
+library(tidymodels)
+
+```
+
+```{r}
+data(ames)
+
+dim(ames)
+
+```
+
+4.1 - Exploring important features
+
+```{r}
+# ploting the last price the house was sold for
+
+ames %>% 
+    ggplot(aes(Sale_Price))+
+    geom_histogram(bins = 50, col = "white")
+
+```
+
+```{r}
+summary(ames$Sale_Price)
+```
+        "When modeling this outcome, a strong argument can be made that the price
+        should be log-transformed. The advantages of doing this are
+        that no houses would be predicted with negative sale prices
+        and that errors in predicting expensive houses will not have an undue
+        influence on the model. Also, from a statistical perspective, a logarithmic
+        transform may also stabilize the variance in a way that
+        makes inference more legitimate"
+```{r}
+ames %>% 
+    ggplot(aes(Sale_Price))+
+    geom_histogram(bins = 50, col = "white")+
+    scale_x_log10()
+
+```
+
+Despite the drawbacks of having the residuals in log scale, from now on the Sale_price collumn will be at log base 10
+
+```{r}
+ames <- ames %>% 
+    mutate(Sale_Price = log10(Sale_Price))
+
+summary(ames$Sale_Price)
+```
+
+
+```{r}
+
+pal <- colorFactor(
+  palette = 'Dark2',
+  domain = ames$Neighborhood
+)
+
+leaflet() %>% 
+addTiles() %>% 
+    addCircles(lat = ames$Latitude, lng = ames$Longitude, color = pal(ames$Neighborhood))
+
+```
+
+
+
+5 - Spending our Data
+
+"At the start of a new project, there is usually an initial finite pool of data available for all these tasks. How should the data be applied to these steps? The idea of data spending is an important first consideration when modeling, especially as it relates to empirical validation."
+
+
+
+```{r}
+#setting the seed
+
+set.seed(501)
+
+ames_split <- initial_split(ames, prop = 0.8)
+
+
+ames_split
+```
+
+```{r}
+ames_train <- training(ames_split)
+
+ames_split <- testing(ames_split)
+
+```
+
+sampling with stratification
+
+```{r}
+set.seed(502)
+ames_split <- initial_split(ames, prop = 0.80, strata = Sale_Price)
+ames_train <- training(ames_split)
+ames_test  <-  testing(ames_split)
+
+```
+
+
+6.1 - Creating a Model
+
+```{r}
+#setting engines
+
+# lm
+linear_reg() %>% set_engine("lm")
+
+```
+
+
+```{r}
+#glmnet
+linear_reg() %>% set_engine("glmnet")
+
+```
+all the options are:
+
+.lm1
+
+.brulee
+
+.gee2
+
+.glm
+
+.glmnet
+
+.gls2
+
+.keras
+
+.lme2
+
+.lmer2
+
+.spark
+
+.stan
+
+.stan_glmer2
+
+
+
+Predicting sale price of houses as a function of longitude and latitude
+```{r}
+
+lm_model <- linear_reg() %>% 
+    set_engine("lm")
+
+
+lm_form_fit <- lm_model %>% 
+    fit(Sale_Price ~ Longitude + Latitude, data = ames_train)
+
+
+lm_form_fit
+```
+
+```{r}
+lm_xy_fit <- 
+    lm_model %>% 
+    fit_xy(
+        x = ames_train %>% select(Longitude, Latitude),
+        y = ames_train %>% pull(Sale_Price)
+    )
+
+lm_xy_fit
+
+```
+
+```{r}
+rand_forest(trees = 1000, min_n = 5) %>% 
+    set_engine("ranger") %>% 
+    set_mode("regression") %>% 
+    translate()
+
+
+```
+
+
+
+```{r}
+rand_forest(trees = 1000, min_n = 5) %>% 
+  set_engine("ranger", verbose = TRUE) %>% 
+  set_mode("regression")
+```
+
+
+6.2 Using the results
+
+
+```{r}
+lm_form_fit %>% extract_fit_engine()
+
+```
+
+```{r}
+lm_form_fit %>% extract_fit_engine() %>% vcov()
+```
+
+
+```{r}
+model_res <- lm_form_fit %>% 
+    extract_fit_engine() %>% 
+    summary()
+```
+
+
+The model coefficient table is accessible via the `coef` method.
+```{r}
+param_est <- coef(model_res)
+param_est
+
+```
+the broom package has methods to convert many types of model objects to a tidy structure. For example, using the tidy() method on the linear model produces:
+```{r}
+tidy(lm_form_fit)
+```
+6.3 Make predictions
+
+or predictions, parsnip always conforms to the following rules:
+
+    The results are always a tibble.
+    The column names of the tibble are always predictable.
+    There are always as many rows in the tibble as there are in the input data set.
+
+```{r}
+ames_test_small <- ames_test %>% 
+    slice(1:5)
+
+
+predict(lm_form_fit, new_data = ames_test_small)
+
+```
+merging the results
+```{r}
+ames_test_small %>% 
+    select(Sale_Price) %>% 
+    bind_cols(predict(lm_form_fit, ames_test_small)) %>% 
+    bind_cols(predict(lm_form_fit, ames_test_small, type = "pred_int")) #pred_int = 95% prediction intervals
+
+
+```
+
+when different models are used, the syntax is identical, and outside of the model specification, there are no significant differences in the code pipeline
+```{r}
+tree_model <- decision_tree(min_n = 2) %>% 
+    set_engine("rpart") %>% 
+    set_mode("regression")
+tree_model
+
+```
+
+```{r}
+tree_fit <- tree_model %>% 
+    fit(Sale_Price ~ Longitude + Latitude, data = ames_train)
+
+tree_model_res <- coef(model_res)
+
+```
+
